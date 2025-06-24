@@ -1,0 +1,119 @@
+// Copyright 2025 Google Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package {
+    default_applicable_licenses: ["Android-Apache-2.0"],
+}
+
+bootstrap_go_package {
+    name: "pogreb",
+    pkgPath: "github.com/akrylysov/pogreb",
+    srcs: [
+        "bucket.go",
+        "compaction.go",
+        "datalog.go",
+        "db.go",
+        "doc.go",
+        "errors.go",
+        "file.go",
+        "gobfile.go",
+        "header.go",
+        "index.go",
+        "iterator.go",
+        "lock.go",
+        "logger.go",
+        "metrics.go",
+        "options.go",
+        "recovery.go",
+        "segment.go",
+    ],
+    testSrcs: [
+        "compaction_test.go",
+        "datalog_test.go",
+        "db_test.go",
+        //"example_test.go",
+        "file_test.go",
+        "iterator_test.go",
+        "recovery_test.go",
+    ],
+    deps: [
+        "pogreb-fs",
+        "pogreb-internal-assert",
+        "pogreb-internal-errors",
+        "pogreb-internal-hash",
+    ],
+}
+
+bootstrap_go_package {
+    name: "pogreb-fs",
+    pkgPath: "github.com/akrylysov/pogreb/fs",
+    srcs: [
+        "fs/fs.go",
+        "fs/mem.go",
+        "fs/os.go",
+        "fs/os_mmap.go",
+        "fs/os_mmap_unix.go",
+        //"fs/os_mmap_windows_386.go",
+        //"fs/os_mmap_windows_amd64.go",
+        //"fs/os_mmap_windows.go",
+        "fs/os_unix.go",
+        //"fs/os_windows.go",
+        "fs/sub.go",
+    ],
+    testSrcs: [
+        "fs/fs_test.go",
+        "fs/mem_test.go",
+        "fs/os_mmap_test.go",
+        "fs/os_test.go",
+        "fs/sub_test.go",
+    ],
+    deps: ["pogreb-internal-assert"],
+}
+
+bootstrap_go_package {
+    name: "pogreb-internal-assert",
+    pkgPath: "github.com/akrylysov/pogreb/internal/assert",
+    srcs: [
+        "internal/assert/assert.go",
+    ],
+    testSrcs: [
+        "internal/assert/assert_test.go",
+    ],
+}
+
+bootstrap_go_package {
+    name: "pogreb-internal-errors",
+    pkgPath: "github.com/akrylysov/pogreb/internal/errors",
+    srcs: [
+        "internal/errors/errors.go",
+    ],
+    testSrcs: [
+        "internal/errors/errors_test.go",
+    ],
+    deps: ["pogreb-internal-assert"],
+}
+
+bootstrap_go_package {
+    name: "pogreb-internal-hash",
+    pkgPath: "github.com/akrylysov/pogreb/internal/hash",
+    srcs: [
+        "internal/hash/murmurhash32.go",
+        "internal/hash/seed.go",
+    ],
+    testSrcs: [
+        "internal/hash/murmurhash32_test.go",
+        "internal/hash/seed_test.go",
+    ],
+    deps: ["pogreb-internal-assert"],
+}
