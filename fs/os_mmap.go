@@ -120,8 +120,9 @@ func (f *osMMapFile) mmap(fileSize int64, mappingSize int64) error {
 		return err
 	}
 
-	_ = madviceRandom(data)
-
+	// Commnet this out for now for testing purpose, will provide a
+	// better solution once have test result.
+	// _ = madviceRandom(data)
 	f.data = data
 	return nil
 }
