@@ -30,8 +30,12 @@ func (fs *errfs) Rename(oldpath, newpath string) error {
 	return errfileError
 }
 
-func (fs *errfs) ReadDir(name string) ([]os.FileInfo, error) {
+func (fs *errfs) ReadDir(name string) ([]os.DirEntry, error) {
 	return nil, errfileError
+}
+
+func (fs *errfs) MkdirAll(path string, perm os.FileMode) error {
+	return errfileError
 }
 
 type errfile struct{}

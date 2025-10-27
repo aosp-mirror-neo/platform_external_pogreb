@@ -6,7 +6,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -30,28 +29,35 @@ var (
 func TestMain(m *testing.M) {
 	flag.Parse()
 	if !testing.Verbose() {
-		SetLogger(log.New(ioutil.Discard, "", 0))
+		SetLogger(log.New(io.Discard, "", 0))
 	}
 	// Run tests against all file systems.
-	for _, fsys := range []fs.FileSystem{fs.Mem, fs.OSMMap, fs.OS} {
-		testFS = fsys
-		if testing.Verbose() {
-			fmt.Printf("=== SET\tFS=%T\n", fsys)
+	for _, fsys := range testFileSystems {
+		var tmpDir string
+		if fsys == fs.Mem {
+			testFS = fsys
+		} else {
+			var err error
+			tmpDir, err = os.MkdirTemp("", "pogreb-test")
+			if err != nil {
+				fmt.Printf("failed to create temporary directory: %v", err)
+				os.Exit(1)
+			}
+			testFS = fs.Sub(fsys, tmpDir)
 		}
-		if exitCode := m.Run(); exitCode != 0 {
+		if testing.Verbose() {
+			fmt.Printf("=== SET\tFS=%T\ttmpDir=%s\n", fsys, tmpDir)
+		}
+		exitCode := m.Run()
+		if tmpDir != "" {
+			_ = os.RemoveAll(tmpDir)
+		}
+		if exitCode != 0 {
 			fmt.Printf("DEBUG\tFS=%T\n", fsys)
 			os.Exit(exitCode)
 		}
 	}
 	os.Exit(0)
-}
-
-func touchFile(fsys fs.FileSystem, path string) error {
-	f, err := fsys.OpenFile(path, os.O_CREATE|os.O_TRUNC, os.FileMode(0640))
-	if err != nil {
-		return err
-	}
-	return f.Close()
 }
 
 func appendFile(path string, data []byte) error {
@@ -87,6 +93,20 @@ func TestHeaderSize(t *testing.T) {
 	}
 }
 
+func cleanDir(path string) error {
+	files, err := testFS.ReadDir(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	for _, file := range files {
+		_ = testFS.Remove(filepath.Join(path, file.Name()))
+	}
+	return nil
+}
+
 func createTestDB(opts *Options) (*DB, error) {
 	if opts == nil {
 		opts = &Options{FileSystem: testFS}
@@ -95,15 +115,10 @@ func createTestDB(opts *Options) (*DB, error) {
 			opts.FileSystem = testFS
 		}
 	}
-	path := testDBName
-	files, err := testFS.ReadDir(path)
-	if err != nil && !os.IsNotExist(err) {
+	if err := cleanDir(testDBName); err != nil {
 		return nil, err
 	}
-	for _, file := range files {
-		_ = testFS.Remove(filepath.Join(path, file.Name()))
-	}
-	return Open(path, opts)
+	return Open(testDBName, opts)
 }
 
 func TestEmpty(t *testing.T) {
@@ -117,6 +132,18 @@ func TestEmpty(t *testing.T) {
 }
 
 func TestFull(t *testing.T) {
+	fullTest(t, func(db *DB, key []byte) ([]byte, error) {
+		return db.Get(key)
+	})
+	var buf []byte
+	fullTest(t, func(db *DB, key []byte) ([]byte, error) {
+		var err error
+		buf, err = db.GetAppend(key, buf[:0])
+		return buf, err
+	})
+}
+
+func fullTest(t *testing.T, getFunc func(db *DB, key []byte) ([]byte, error)) {
 	opts := &Options{
 		BackgroundSyncInterval: -1,
 		FileSystem:             testFS,
@@ -165,7 +192,7 @@ func TestFull(t *testing.T) {
 			if has, err := db.Has([]byte{0, i}); has || err != nil {
 				t.Fatal(has, err)
 			}
-			v, err := db.Get([]byte{i})
+			v, err := getFunc(db, []byte{i})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -203,7 +230,7 @@ func TestFull(t *testing.T) {
 	verifyKeysAndClose(6)
 
 	// Delete all items
-	db, err = Open(testDBName, &Options{BackgroundSyncInterval: time.Millisecond})
+	db, err = Open(testDBName, &Options{BackgroundSyncInterval: time.Millisecond, FileSystem: testFS})
 	assert.Nil(t, err)
 	for i = 0; i < n; i++ {
 		assert.Nil(t, db.Delete([]byte{i}))
@@ -418,14 +445,35 @@ func BenchmarkGet(b *testing.B) {
 	db, err := createTestDB(nil)
 	assert.Nil(b, err)
 	k := []byte{1}
-	if err := db.Put(k, k); err != nil {
+	if err := db.Put(k, make([]byte, 1024)); err != nil {
 		b.Fail()
 	}
 	b.ResetTimer()
+	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		if _, err := db.Get(k); err != nil {
 			b.Fatal()
 		}
+	}
+	assert.Nil(b, db.Close())
+}
+
+func BenchmarkGetAppend(b *testing.B) {
+	db, err := createTestDB(nil)
+	assert.Nil(b, err)
+	k := []byte{1}
+	if err := db.Put(k, make([]byte, 1024)); err != nil {
+		b.Fail()
+	}
+	b.ResetTimer()
+	b.ReportAllocs()
+	buf := make([]byte, 0, 1024)
+	for i := 0; i < b.N; i++ {
+		value, err := db.GetAppend(k, buf[:0])
+		if err != nil {
+			b.Fatal()
+		}
+		buf = value
 	}
 	assert.Nil(b, db.Close())
 }

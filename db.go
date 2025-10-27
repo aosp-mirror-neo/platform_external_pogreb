@@ -30,17 +30,17 @@ const (
 // DB represents the key-value storage.
 // All DB methods are safe for concurrent use by multiple goroutines.
 type DB struct {
-	mu                sync.RWMutex // Allows multiple database readers or a single writer.
-	opts              *Options
-	index             *index
-	datalog           *datalog
-	lock              fs.LockFile // Prevents opening multiple instances of the same database.
-	hashSeed          uint32
-	metrics           *Metrics
-	syncWrites        bool
-	cancelBgWorker    context.CancelFunc
-	closeWg           sync.WaitGroup
-	compactionRunning int32 // Prevents running compactions concurrently.
+	mu             sync.RWMutex // Allows multiple database readers or a single writer.
+	opts           *Options
+	index          *index
+	datalog        *datalog
+	lock           fs.LockFile // Prevents opening multiple instances of the same database.
+	hashSeed       uint32
+	metrics        *Metrics
+	syncWrites     bool
+	cancelBgWorker context.CancelFunc
+	closeWg        sync.WaitGroup
+	maintenanceMu  sync.Mutex // Ensures there only one maintenance task running at a time.
 }
 
 type dbMeta struct {
@@ -52,7 +52,7 @@ type dbMeta struct {
 func Open(path string, opts *Options) (*DB, error) {
 	opts = opts.copyWithDefaults(path)
 
-	if err := os.MkdirAll(path, 0755); err != nil {
+	if err := opts.rootFS.MkdirAll(path, 0755); err != nil {
 		return nil, err
 	}
 
@@ -204,6 +204,34 @@ func (db *DB) Get(key []byte) ([]byte, error) {
 		}
 		if bytes.Equal(key, slKey) {
 			retValue = cloneBytes(value)
+			return true, nil
+		}
+		db.metrics.HashCollisions.Add(1)
+		return false, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return retValue, nil
+}
+
+// GetAppend returns the value for the given key (appended into buffer) stored in the DB or nil if the key doesn't exist
+func (db *DB) GetAppend(key, buf []byte) ([]byte, error) {
+	h := db.hash(key)
+	db.metrics.Gets.Add(1)
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+	var retValue []byte
+	err := db.index.get(h, func(sl slot) (bool, error) {
+		if uint16(len(key)) != sl.keySize {
+			return false, nil
+		}
+		slKey, value, err := db.datalog.readKeyValue(sl)
+		if err != nil {
+			return true, err
+		}
+		if bytes.Equal(key, slKey) {
+			retValue = append(buf, value...)
 			return true, nil
 		}
 		db.metrics.HashCollisions.Add(1)
@@ -391,7 +419,11 @@ func (db *DB) FileSize() (int64, error) {
 		return 0, err
 	}
 	for _, file := range files {
-		size += file.Size()
+		info, err := file.Info()
+		if err != nil {
+			return 0, err
+		}
+		size += info.Size()
 	}
 	return size, nil
 }
