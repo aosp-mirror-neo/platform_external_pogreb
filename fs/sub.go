@@ -39,7 +39,7 @@ func (fs *subFS) Rename(oldpath, newpath string) error {
 	return fs.fsys.Rename(subOldpath, subNewpath)
 }
 
-func (fs *subFS) ReadDir(name string) ([]os.FileInfo, error) {
+func (fs *subFS) ReadDir(name string) ([]os.DirEntry, error) {
 	subName := filepath.Join(fs.root, name)
 	return fs.fsys.ReadDir(subName)
 }
@@ -47,6 +47,11 @@ func (fs *subFS) ReadDir(name string) ([]os.FileInfo, error) {
 func (fs *subFS) CreateLockFile(name string, perm os.FileMode) (LockFile, bool, error) {
 	subName := filepath.Join(fs.root, name)
 	return fs.fsys.CreateLockFile(subName, perm)
+}
+
+func (fs *subFS) MkdirAll(path string, perm os.FileMode) error {
+	subPath := filepath.Join(fs.root, path)
+	return fs.fsys.MkdirAll(subPath, perm)
 }
 
 var _ FileSystem = &subFS{}

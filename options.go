@@ -13,17 +13,20 @@ type Options struct {
 	//
 	// Setting the value to 0 disables the automatic background synchronization.
 	// Setting the value to -1 makes the DB call Sync() after every write operation.
+	// Default: 0
 	BackgroundSyncInterval time.Duration
 
 	// BackgroundCompactionInterval sets the amount of time between background Compact() calls.
 	//
 	// Setting the value to 0 disables the automatic background compaction.
+	// Default: 0
 	BackgroundCompactionInterval time.Duration
 
 	// FileSystem sets the file system implementation.
 	//
 	// Default: fs.OSMMap.
 	FileSystem fs.FileSystem
+	rootFS fs.FileSystem
 
 	maxSegmentSize             uint32
 	compactionMinSegmentSize   uint32
@@ -36,8 +39,9 @@ func (src *Options) copyWithDefaults(path string) *Options {
 		opts = *src
 	}
 	if opts.FileSystem == nil {
-		opts.FileSystem = fs.OSMMap
+		opts.FileSystem = fs.DefaultFileSystem()
 	}
+	opts.rootFS = opts.FileSystem
 	opts.FileSystem = fs.Sub(opts.FileSystem, path)
 	if opts.maxSegmentSize == 0 {
 		opts.maxSegmentSize = math.MaxUint32
